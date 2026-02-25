@@ -1,10 +1,10 @@
 import cv2
 import mediapipe as mp
-import time
-from pycaw.pycaw import AudioUtilities
 import math
 import numpy as np
 import os
+import platform
+import subprocess
 
 BaseOptions = mp.tasks.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
@@ -15,6 +15,32 @@ RunningMode = mp.tasks.vision.RunningMode
 MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hand_landmarker.task")
 
 HAND_CONNECTIONS = HandLandmarksConnections.HAND_CONNECTIONS
+
+
+class VolumeController:
+    """Cross-platform volume controller: pycaw on Windows, amixer on Linux."""
+
+    def __init__(self):
+        if platform.system() == 'Windows':
+            from pycaw.pycaw import AudioUtilities
+            devices = AudioUtilities.GetSpeakers()
+            self._volume = devices.EndpointVolume
+            self.vol_min, self.vol_max = self._volume.GetVolumeRange()[:2]
+            self._platform = 'windows'
+        else:
+            self.vol_min = -63.5
+            self.vol_max = 0.0
+            self._platform = 'linux'
+
+    def set_volume(self, vol):
+        if self._platform == 'windows':
+            self._volume.SetMasterVolumeLevel(vol, None)
+        else:
+            pct = int(np.interp(vol, [self.vol_min, self.vol_max], [0, 100]))
+            subprocess.run(
+                ['amixer', 'set', 'Master', f'{pct}%'],
+                capture_output=True,
+            )
 
 
 class handDetector():
@@ -54,7 +80,7 @@ class handDetector():
                         cv2.line(img, (sx, sy), (ex, ey), (0, 255, 0), 2)
         return img
 
-    def findPosition(self, img, draw=True):
+    def findPosition(self, img):
         Plist = []
         if self.results and self.results.hand_landmarks:
             for hand_landmarks in self.results.hand_landmarks:
@@ -66,25 +92,18 @@ class handDetector():
 
 
 def main():
-    pTime = 0
-    cTime = 0
     cap = cv2.VideoCapture(0)
     detector = handDetector()
-    devices = AudioUtilities.GetSpeakers()
-    volume = devices.EndpointVolume
+    vol_ctrl = VolumeController()
     volbar = 400
     volper = 0
 
-    volMin, volMax = volume.GetVolumeRange()[:2]
+    volMin, volMax = vol_ctrl.vol_min, vol_ctrl.vol_max
     while True:
         success, img = cap.read()
         if not success:
             continue
         img = detector.findHands(img)
-
-        cTime = time.time()
-        fps = 1 / (cTime - pTime) if (cTime - pTime) > 0 else 0
-        pTime = cTime
 
         Plist = detector.findPosition(img)
 
@@ -95,13 +114,12 @@ def main():
             cv2.circle(img, (x2, y2), 13, (255, 0, 0), cv2.FILLED)
             cv2.line(img, (x1, y1), (x2, y2), (255, 0, 0), 3)
             length = math.hypot(x2 - x1, y2 - y1)
-            print(length)
 
             vol = np.interp(length, [30, 350], [volMin, volMax])
             volbar = np.interp(length, [30, 350], [400, 150])
             volper = np.interp(length, [30, 350], [0, 100])
 
-            volume.SetMasterVolumeLevel(vol, None)
+            vol_ctrl.set_volume(vol)
 
             cv2.rectangle(img, (50, 150), (85, 400), (0, 0, 255), 4)
             cv2.rectangle(img, (50, int(volbar)), (85, 400), (0, 0, 255), cv2.FILLED)

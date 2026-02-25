@@ -1,0 +1,5 @@
+opencv-python==4.13.0.92
+mediapipe==0.10.30
+numpy==2.4.2
+pycaw==20251023; sys_platform == "win32"
+comtypes==1.4.15; sys_platform == "win32"
