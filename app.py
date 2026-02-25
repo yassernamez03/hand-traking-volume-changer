@@ -5,6 +5,7 @@ import numpy as np
 import os
 import platform
 import subprocess
+import time
 
 BaseOptions = mp.tasks.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
@@ -99,6 +100,7 @@ def main():
     volper = 0
 
     volMin, volMax = vol_ctrl.vol_min, vol_ctrl.vol_max
+    pTime = 0
     while True:
         success, img = cap.read()
         if not success:
@@ -124,6 +126,12 @@ def main():
             cv2.rectangle(img, (50, 150), (85, 400), (0, 0, 255), 4)
             cv2.rectangle(img, (50, int(volbar)), (85, 400), (0, 0, 255), cv2.FILLED)
             cv2.putText(img, f"{int(volper)}%", (10, 40), cv2.FONT_ITALIC, 1, (0, 255, 98), 3)
+
+        cTime = time.time()
+        fps = 1 / (cTime - pTime) if (cTime - pTime) > 0 else 0
+        pTime = cTime
+        cv2.putText(img, f"FPS: {int(fps)}", (img.shape[1] - 180, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
         cv2.imshow('Image', img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
